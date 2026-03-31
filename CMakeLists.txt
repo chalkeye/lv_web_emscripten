@@ -24,4 +24,10 @@ target_link_libraries(index
     lvgl_thorvg
     SDL2
 )
-set_target_properties(index PROPERTIES LINK_FLAGS "--shell-file ${PROJECT_SOURCE_DIR}/lvgl_shell.html -s SINGLE_FILE=1 -s ALLOW_MEMORY_GROWTH=1 -s INITIAL_MEMORY=268435456 -s MAXIMUM_MEMORY=536870912")
+target_link_options(index PRIVATE
+    "-sSINGLE_FILE=1"
+    "-sALLOW_MEMORY_GROWTH=1"
+    "-sINITIAL_MEMORY=268435456"
+    "-sMAXIMUM_MEMORY=536870912"
+    "--shell-file=${PROJECT_SOURCE_DIR}/lvgl_shell.html"
+)
