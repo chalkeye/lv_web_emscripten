@@ -1,0 +1,33 @@
+name: Build Web Simulator
+
+# This tells GitHub to run the build whenever you click the button or push code
+on:
+  push:
+    branches: [ "release/v8.3" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository (with submodules)
+      uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+
+    - name: Setup Web Compiler (Emscripten)
+      uses: mymindstorm/setup-emsdk@v14
+
+    - name: Compile the UI
+      run: |
+        mkdir build
+        cd build
+        emcmake cmake ..
+        emmake make -j4
+
+    - name: Save the Website Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: kaffelogic-web-app
+        path: build/index.html
