@@ -7,9 +7,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -s USE_SDL=2")
 # Force Emscripten to auto-size the memory for your heavy UI arrays
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s ALLOW_MEMORY_GROWTH=1 -s SINGLE_FILE=1 --shell-file ${PROJECT_SOURCE_DIR}/lvgl_shell.html")
 
-# Force 16-bit color and disable the broken Chinese keyboard
-add_compile_definitions(LV_COLOR_DEPTH=16 LV_USE_IME_PINYIN=0)
-
 include_directories(${PROJECT_SOURCE_DIR})
 
 add_subdirectory(lvgl)
