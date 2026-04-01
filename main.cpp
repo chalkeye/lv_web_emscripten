@@ -197,8 +197,8 @@ PhysicalButton get_physical_button_press() {
     const uint8_t *state = SDL_GetKeyboardState(NULL);
     if (state[SDL_SCANCODE_1])      current_reading = BTN_UP;
     else if (state[SDL_SCANCODE_2]) current_reading = BTN_DOWN;
-    else if (state[SDL_SCANCODE_3]) current_reading = BTN_ENTER;
-    else if (state[SDL_SCANCODE_4]) current_reading = BTN_BACK;
+    else if (state[SDL_SCANCODE_3]) current_reading = BTN_BACK;
+    else if (state[SDL_SCANCODE_4]) current_reading = BTN_ENTER;
 #endif
 
     // The existing debounce logic handles the "one-shot" press for us
