@@ -4,24 +4,21 @@ project (lv_emscripten)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2 -s USE_SDL=2")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -s USE_SDL=2")
 
-# Force Emscripten to auto-size the memory for your heavy UI arrays
+# Force memory growth so your high-res graphics don't crash the browser
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s ALLOW_MEMORY_GROWTH=1 -s SINGLE_FILE=1 --shell-file ${PROJECT_SOURCE_DIR}/lvgl_shell.html")
 
 include_directories(${PROJECT_SOURCE_DIR})
+include_directories(${PROJECT_SOURCE_DIR}/ui)
 
 add_subdirectory(lvgl)
 add_subdirectory(lv_drivers)
 
-file(GLOB MY_SOURCES "./*.c" "./*.cpp" "ui/*.c")
+# THE KEY: GLOB_RECURSE finds every single .c and .cpp file in the ui folder and subfolders
+file(GLOB_RECURSE MY_SOURCES "./*.c" "./*.cpp" "ui/*.c" "ui/*.cpp")
 set(SOURCES ${MY_SOURCES})
 
-add_executable(index ${SOURCES} ${INCLUDES})
+add_executable(index ${SOURCES})
 
-if(NOT LVGL_CHOSEN_DEMO)
-    set(LVGL_CHOSEN_DEMO lv_demo_widgets)
-endif()
-
-set_source_files_properties(main.cpp PROPERTIES COMPILE_FLAGS -DCHOSEN_DEMO=${LVGL_CHOSEN_DEMO})
-
+set_source_files_properties(main.cpp PROPERTIES COMPILE_FLAGS -DCHOSEN_DEMO=0)
 set(CMAKE_EXECUTABLE_SUFFIX ".html")
 target_link_libraries(index lvgl lvgl_examples lvgl_demos lv_drivers)
