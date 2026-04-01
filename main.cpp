@@ -53,7 +53,8 @@ extern "C" {
     // WEB SIMULATOR INCLUDES & DEFINES (Emscripten)
     // ============================================================================
     #include <emscripten.h>
-    
+    #include <SDL2/SDL.h>
+
     // CRITICAL: We must define these variables so the C-based monitor driver can find them
     extern "C" {
         #include "lv_drivers/display/monitor.h"
