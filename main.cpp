@@ -182,16 +182,29 @@ PhysicalButton get_physical_button_press() {
     static uint32_t last_debounce_time = 0;
     static PhysicalButton last_steady_state = BTN_NONE;
     PhysicalButton current_reading = BTN_NONE;
+
 #ifdef ARDUINO
+    // PHYSICAL HARDWARE ADC READING
     int adc_value = analogRead(BUTTON_ADC_PIN);
     if (adc_value > 3800) current_reading = BTN_ENTER;
     else if (adc_value > 1850 && adc_value < 2250) current_reading = BTN_BACK;
     else if (adc_value > 1200 && adc_value < 1550) current_reading = BTN_DOWN;
     else if (adc_value > 850 && adc_value < 1150) current_reading = BTN_UP;
+#else
+    // WEB SIMULATOR KEYBOARD MAPPING
+    // We use the SDL state to see which keys are currently held down
+    const uint8_t *state = SDL_GetKeyboardState(NULL);
+    if (state[SDL_SCANCODE_1])      current_reading = BTN_UP;
+    else if (state[SDL_SCANCODE_2]) current_reading = BTN_DOWN;
+    else if (state[SDL_SCANCODE_3]) current_reading = BTN_ENTER;
+    else if (state[SDL_SCANCODE_4]) current_reading = BTN_BACK;
 #endif
+
+    // The existing debounce logic handles the "one-shot" press for us
     if ((millis() - last_debounce_time) > 50) {
         if (current_reading != last_steady_state) {
             last_steady_state = current_reading;
+            last_debounce_time = millis(); // Update timer on state change
             return current_reading; 
         }
     }
