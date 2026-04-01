@@ -49,12 +49,25 @@ extern "C" {
     void lvgl_port_unlock(void) { xSemaphoreGiveRecursive(lvgl_mux); }
 
 #else
+    // ============================================================================
+    // WEB SIMULATOR INCLUDES & DEFINES (Emscripten)
+    // ============================================================================
     #include <emscripten.h>
+    
+    // CRITICAL: We must define these variables so the C-based monitor driver can find them
     extern "C" {
         #include "lv_drivers/display/monitor.h"
         #include "lv_drivers/indev/mouse.h"
+        
+        // These are the missing symbols the linker is screaming about:
+        int monitor_hor_res = 800;
+        int monitor_ver_res = 480;
     }
+
+    // Mock the Arduino millis() function using LVGL's internal tick counter
     uint32_t millis() { return lv_tick_get(); }
+    
+    // Mock the thread locks for the web wrapper so the main logic stays clean
     void lvgl_port_lock(int timeout_ms) {}
     void lvgl_port_unlock(void) {}
 #endif
