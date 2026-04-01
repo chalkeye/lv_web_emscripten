@@ -3,7 +3,7 @@
 #include <cstdlib>
 
 // ============================================================================
-// 1. SHARED UI BRIDGE (Must be at the top)
+// 1. SHARED UI BRIDGE
 // ============================================================================
 #ifdef __cplusplus
 extern "C" {
@@ -32,12 +32,9 @@ extern "C" {
     #define I2C_MASTER_SCL_IO 9
     #define BUTTON_ADC_PIN 6 
 
-    #define LVGL_TICK_PERIOD_MS     (2)
-    #define LVGL_TASK_MAX_DELAY_MS  (5)
-    #define LVGL_TASK_MIN_DELAY_MS  (1)
-    #define LVGL_TASK_STACK_SIZE    (10 * 1024)
-    #define LVGL_TASK_PRIORITY      (2)
-    #define LVGL_BUF_SIZE           (800 * 50)
+    #define LVGL_BUF_SIZE (800 * 50)
+    #define LVGL_TASK_STACK_SIZE (10 * 1024)
+    #define LVGL_TASK_PRIORITY (2)
 
     ESP_Panel *panel = NULL;
     SemaphoreHandle_t lvgl_mux = NULL;
@@ -49,32 +46,23 @@ extern "C" {
     void lvgl_port_unlock(void) { xSemaphoreGiveRecursive(lvgl_mux); }
 
 #else
-    // ============================================================================
-    // WEB SIMULATOR INCLUDES & DEFINES (Emscripten)
-    // ============================================================================
     #include <emscripten.h>
     #include <SDL2/SDL.h>
-
-    // CRITICAL: We must define these variables so the C-based monitor driver can find them
+    
     extern "C" {
         #include "lv_drivers/display/monitor.h"
         #include "lv_drivers/indev/mouse.h"
-        
-        // These are the missing symbols the linker is screaming about:
         int monitor_hor_res = 800;
         int monitor_ver_res = 480;
     }
 
-    // Mock the Arduino millis() function using LVGL's internal tick counter
     uint32_t millis() { return lv_tick_get(); }
-    
-    // Mock the thread locks for the web wrapper so the main logic stays clean
     void lvgl_port_lock(int timeout_ms) {}
     void lvgl_port_unlock(void) {}
 #endif
 
 // ============================================================================
-// 3. SHARED GLOBALS (Must be declared before run_system_loop)
+// 3. SHARED GLOBALS
 // ============================================================================
 uint32_t last_activity_time = 0;
 bool is_idle = false; 
@@ -107,7 +95,7 @@ lv_obj_t* p_roller_prev; lv_obj_t* p_roller_active; lv_obj_t* p_roller_next;
 enum PhysicalButton { BTN_NONE, BTN_UP, BTN_DOWN, BTN_ENTER, BTN_BACK };
 
 // ============================================================================
-// 4. SHARED UI LOGIC FUNCTIONS
+// 4. SHARED UI HELPER FUNCTIONS
 // ============================================================================
 bool is_leaf_tier(MenuTier tier) {
     switch (tier) {
@@ -170,30 +158,71 @@ void apply_menu_formatting() {
     lv_label_set_text(ui_IntensityVariable1, current_intensity);
 }
 
+// ============================================================================
+// 5. MISSING MENU TRANSITION FUNCTIONS (The "Muscles")
+// ============================================================================
 void reset_menu_state() {
     current_menu_tier = TIER_ROOT;
     p_panel_prev = ui_MenuPrev; p_panel_active = ui_MenuActive; p_panel_next = ui_MenuNext;
     p_roller_prev = ui_MenuPrevRoller; p_roller_active = ui_MenuActiveRoller; p_roller_next = ui_MenuNextRoller;
+    
+    lv_obj_set_x(p_panel_prev, -400); 
+    lv_obj_set_x(p_panel_active, 0); 
+    lv_obj_set_x(p_panel_next, 400);
+    
     apply_menu_formatting();
     load_menu_tier_to_roller(TIER_ROOT, p_roller_active);
     update_next_preview();
 }
 
+void slide_menu_forward(MenuTier target_tier) {
+    load_menu_tier_to_roller(target_tier, p_roller_next);
+    
+    lv_anim_t a_out; lv_anim_init(&a_out); lv_anim_set_var(&a_out, p_panel_active); lv_anim_set_values(&a_out, 0, -400); 
+    lv_anim_set_time(&a_out, 500); lv_anim_set_exec_cb(&a_out, (lv_anim_exec_xcb_t)lv_obj_set_x); lv_anim_start(&a_out);
+    
+    lv_anim_t a_in; lv_anim_init(&a_in); lv_anim_set_var(&a_in, p_panel_next); lv_anim_set_values(&a_in, 400, 0); 
+    lv_anim_set_time(&a_in, 500); lv_anim_set_exec_cb(&a_in, (lv_anim_exec_xcb_t)lv_obj_set_x); lv_anim_start(&a_in);
+    
+    current_menu_tier = target_tier;
+    lv_obj_t* t_p = p_panel_prev; p_panel_prev = p_panel_active; p_panel_active = p_panel_next; p_panel_next = t_p;
+    lv_obj_t* t_r = p_roller_prev; p_roller_prev = p_roller_active; p_roller_active = p_roller_next; p_roller_next = t_r;
+    lv_obj_set_x(p_panel_next, 400); update_next_preview(); apply_menu_formatting();
+}
+
+void slide_menu_backward(MenuTier target_tier) {
+    load_menu_tier_to_roller(target_tier, p_roller_prev);
+    
+    lv_anim_t a_out; lv_anim_init(&a_out); lv_anim_set_var(&a_out, p_panel_active); lv_anim_set_values(&a_out, 0, 400); 
+    lv_anim_set_time(&a_out, 500); lv_anim_set_exec_cb(&a_out, (lv_anim_exec_xcb_t)lv_obj_set_x); lv_anim_start(&a_out);
+    
+    lv_anim_t a_in; lv_anim_init(&a_in); lv_anim_set_var(&a_in, p_panel_prev); lv_anim_set_values(&a_in, -400, 0); 
+    lv_anim_set_time(&a_in, 500); lv_anim_set_exec_cb(&a_in, (lv_anim_exec_xcb_t)lv_obj_set_x); lv_anim_start(&a_in);
+    
+    current_menu_tier = target_tier;
+    lv_obj_t* t_p = p_panel_next; p_panel_next = p_panel_active; p_panel_active = p_panel_prev; p_panel_prev = t_p;
+    lv_obj_t* t_r = p_roller_next; p_roller_next = p_roller_active; p_roller_active = p_roller_prev; p_roller_prev = t_r;
+    lv_obj_set_x(p_panel_prev, -400); update_next_preview(); apply_menu_formatting();
+}
+
+void expand_menu_in_place(MenuTier target_tier) { current_menu_tier = target_tier; load_menu_tier_to_roller(target_tier, p_roller_next); }
+void collapse_menu_in_place(MenuTier parent_tier) { current_menu_tier = parent_tier; update_next_preview(); }
+
+// ============================================================================
+// 6. BUTTON DETECTION & LOGIC
+// ============================================================================
 PhysicalButton get_physical_button_press() {
     static uint32_t last_debounce_time = 0;
     static PhysicalButton last_steady_state = BTN_NONE;
     PhysicalButton current_reading = BTN_NONE;
 
 #ifdef ARDUINO
-    // PHYSICAL HARDWARE ADC READING
     int adc_value = analogRead(BUTTON_ADC_PIN);
     if (adc_value > 3800) current_reading = BTN_ENTER;
     else if (adc_value > 1850 && adc_value < 2250) current_reading = BTN_BACK;
     else if (adc_value > 1200 && adc_value < 1550) current_reading = BTN_DOWN;
     else if (adc_value > 850 && adc_value < 1150) current_reading = BTN_UP;
 #else
-    // WEB SIMULATOR KEYBOARD MAPPING
-    // We use the SDL state to see which keys are currently held down
     const uint8_t *state = SDL_GetKeyboardState(NULL);
     if (state[SDL_SCANCODE_1])      current_reading = BTN_UP;
     else if (state[SDL_SCANCODE_2]) current_reading = BTN_DOWN;
@@ -201,11 +230,10 @@ PhysicalButton get_physical_button_press() {
     else if (state[SDL_SCANCODE_4]) current_reading = BTN_ENTER;
 #endif
 
-    // The existing debounce logic handles the "one-shot" press for us
     if ((millis() - last_debounce_time) > 50) {
         if (current_reading != last_steady_state) {
             last_steady_state = current_reading;
-            last_debounce_time = millis(); // Update timer on state change
+            last_debounce_time = millis();
             return current_reading; 
         }
     }
@@ -214,27 +242,96 @@ PhysicalButton get_physical_button_press() {
 
 void process_button_logic(PhysicalButton btn) {
     if (btn == BTN_NONE) return;
-    if (btn == BTN_ENTER && lv_scr_act() == ui_RoastMain) {
-        lv_scr_load(ui_Roasting); current_roast_state = ROAST_HEATING; roast_start_time = millis();
+    lv_obj_t* focused_roller = is_leaf_tier(current_menu_tier) ? p_roller_next : p_roller_active;
+
+    if (btn == BTN_UP) {
+        if (lv_scr_act() == ui_RoastMain) { lv_event_send(ui_Button1, LV_EVENT_CLICKED, NULL); reset_menu_state(); } 
+        else if (lv_scr_act() == ui_Menu1) {
+            uint16_t cur = lv_roller_get_selected(focused_roller);
+            if (cur > 0) { 
+                lv_roller_set_selected(focused_roller, cur - 1, LV_ANIM_ON); 
+                if (!is_leaf_tier(current_menu_tier)) update_next_preview(cur - 1); 
+            }
+        }
     }
-    else if (btn == BTN_BACK && lv_scr_act() == ui_RoastMain) {
-        lv_scr_load(ui_Menu1); reset_menu_state();
+    else if (btn == BTN_DOWN) {
+        if (lv_scr_act() == ui_Menu1) {
+            uint16_t cur = lv_roller_get_selected(focused_roller); 
+            if (cur < lv_roller_get_option_cnt(focused_roller) - 1) { 
+                lv_roller_set_selected(focused_roller, cur + 1, LV_ANIM_ON); 
+                if (!is_leaf_tier(current_menu_tier)) update_next_preview(cur + 1); 
+            }
+        }
+    }
+    else if (btn == BTN_BACK) {
+        if (lv_scr_act() == ui_Roasting) { current_roast_state = ROAST_NONE; lv_scr_load(ui_RoastMain); }
+        else if (lv_scr_act() == ui_Menu1) {
+            if (current_menu_tier == TIER_ROOT) lv_scr_load(ui_RoastMain);
+            else if (current_menu_tier == TIER_PREFS) slide_menu_backward(TIER_ROOT);
+            else if (current_menu_tier == TIER_DISPLAY) slide_menu_backward(TIER_PREFS);
+            else if (current_menu_tier == TIER_CONNECTIVITY) slide_menu_backward(TIER_PREFS);
+            else if (is_leaf_tier(current_menu_tier)) {
+                if (current_menu_tier == TIER_BREW || current_menu_tier == TIER_INTENSITY) collapse_menu_in_place(TIER_ROOT);
+                else if (current_menu_tier == TIER_WIFI) collapse_menu_in_place(TIER_CONNECTIVITY);
+                else if (current_menu_tier == TIER_SCREENSAVER) collapse_menu_in_place(TIER_DISPLAY);
+                else collapse_menu_in_place(TIER_PREFS);
+            }
+        }
+    }
+    else if (btn == BTN_ENTER) {
+        if (lv_scr_act() == ui_RoastMain) { 
+            lv_scr_load(ui_Roasting); current_roast_state = ROAST_HEATING; roast_start_time = millis();
+            lv_label_set_text(ui_RoasterStatus, "Roasting..."); 
+        }
+        else if (lv_scr_act() == ui_Menu1) {
+            uint16_t idx = lv_roller_get_selected(focused_roller);
+            if (current_menu_tier == TIER_ROOT) {
+                last_root_idx = idx;
+                if (idx == 0) expand_menu_in_place(TIER_BREW); 
+                else if (idx == 1) expand_menu_in_place(TIER_INTENSITY); 
+                else if (idx == 2) slide_menu_forward(TIER_PREFS);
+            }
+            else if (current_menu_tier == TIER_PREFS) {
+                last_prefs_idx = idx;
+                if (idx == 0) expand_menu_in_place(TIER_UNITS); 
+                else if (idx == 1) expand_menu_in_place(TIER_LANGUAGE); 
+                else if (idx == 2) slide_menu_forward(TIER_DISPLAY); 
+                else if (idx == 3) expand_menu_in_place(TIER_ROASTING); 
+                else if (idx == 4) slide_menu_forward(TIER_CONNECTIVITY);
+            }
+            else if (current_menu_tier == TIER_DISPLAY) {
+                if (idx == 3) expand_menu_in_place(TIER_SCREENSAVER); 
+                else slide_menu_backward(TIER_PREFS); 
+            }
+            else if (is_leaf_tier(current_menu_tier)) {
+                char sel_str[32]; lv_roller_get_selected_str(focused_roller, sel_str, sizeof(sel_str));
+                if (current_menu_tier == TIER_BREW) { 
+                    strncpy(current_brew, sel_str, 31); 
+                    lv_label_set_text(ui_BrewStyleVariable, current_brew); 
+                    collapse_menu_in_place(TIER_ROOT); 
+                }
+                else if (current_menu_tier == TIER_INTENSITY) { 
+                    strncpy(current_intensity, sel_str, 15); 
+                    lv_label_set_text(ui_IntensityVariable1, current_intensity); 
+                    collapse_menu_in_place(TIER_ROOT); 
+                }
+                else collapse_menu_in_place(TIER_PREFS);
+            }
+        }
     }
 }
 
 // ============================================================================
-// 5. SYSTEM LOOP (SHARED)
+// 7. SYSTEM LOOP & ENTRY POINTS
 // ============================================================================
 void run_system_loop() {
     uint32_t current_time = millis();
-
     if (is_booting) {
         if (current_time - boot_start_time > 5000) {
             is_booting = false;
             lvgl_port_lock(-1);
             lv_scr_load(ui_RoastMain);
             lvgl_port_unlock();
-            last_activity_time = current_time; 
         }
     } 
     else {
@@ -243,20 +340,10 @@ void run_system_loop() {
             lvgl_port_lock(-1);
             process_button_logic(active_btn);
             lvgl_port_unlock();
-            last_activity_time = current_time;
         }
-    }
-
-    if (lv_scr_act() == ui_Roasting && current_roast_state != ROAST_NONE) {
-        lvgl_port_lock(-1);
-        // ... (Roasting Logic)
-        lvgl_port_unlock();
     }
 }
 
-// ============================================================================
-// 6. ENTRY POINTS (Hardware vs. Web)
-// ============================================================================
 #ifdef ARDUINO
     void lvgl_port_task(void *arg) {
         while (1) {
@@ -266,67 +353,33 @@ void run_system_loop() {
             vTaskDelay(pdMS_TO_TICKS(5));
         }
     }
-
     void setup() {
-        Serial.begin(115200);
         panel = new ESP_Panel();
         lv_init();
-        
         static lv_disp_draw_buf_t draw_buf;
         uint8_t *buf = (uint8_t *)heap_caps_calloc(1, LVGL_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_INTERNAL);
         lv_disp_draw_buf_init(&draw_buf, buf, NULL, LVGL_BUF_SIZE);
-
-        // ... (Your existing Arduino Display Setup) ...
-        
+        // ... Display Setup ...
         lvgl_mux = xSemaphoreCreateRecursiveMutex();
-        xTaskCreate(lvgl_port_task, "lvgl", LVGL_TASK_STACK_SIZE, NULL, LVGL_TASK_PRIORITY, NULL);
-
+        xTaskCreate(lvgl_port_task, "lvgl", 10240, NULL, 2, NULL);
         lvgl_port_lock(-1);
-        ui_init(); 
-        reset_menu_state(); 
-        lv_scr_load(ui_SplashScreen);
-        is_booting = true;
-        boot_start_time = millis();
+        ui_init(); reset_menu_state(); lv_scr_load(ui_SplashScreen);
+        is_booting = true; boot_start_time = millis();
         lvgl_port_unlock();
     }
-
     void loop() { run_system_loop(); delay(10); }
-
 #else
-    void emscripten_loop_wrapper() {
-        run_system_loop();
-        lv_timer_handler();
-    }
-
+    void emscripten_loop_wrapper() { run_system_loop(); lv_timer_handler(); }
     int main(void) {
-        lv_init();
-        monitor_init();
-        
-        static lv_disp_draw_buf_t disp_buf;
-        static lv_color_t buf[800 * 100];
+        lv_init(); monitor_init();
+        static lv_disp_draw_buf_t disp_buf; static lv_color_t buf[800 * 100];
         lv_disp_draw_buf_init(&disp_buf, buf, NULL, 800 * 100);
-        
-        static lv_disp_drv_t disp_drv;
-        lv_disp_drv_init(&disp_drv);
-        disp_drv.draw_buf = &disp_buf;
-        disp_drv.flush_cb = monitor_flush;
-        disp_drv.hor_res = 800;
-        disp_drv.ver_res = 480;
-        lv_disp_drv_register(&disp_drv);
-
+        static lv_disp_drv_t disp_drv; lv_disp_drv_init(&disp_drv);
+        disp_drv.draw_buf = &disp_buf; disp_drv.flush_cb = monitor_flush;
+        disp_drv.hor_res = 800; disp_drv.ver_res = 480; lv_disp_drv_register(&disp_drv);
         mouse_init();
-        static lv_indev_drv_t indev_drv;
-        lv_indev_drv_init(&indev_drv);
-        indev_drv.type = LV_INDEV_TYPE_POINTER;
-        indev_drv.read_cb = mouse_read;
-        lv_indev_drv_register(&indev_drv);
-
-        ui_init(); 
-        reset_menu_state();
-        lv_scr_load(ui_SplashScreen);
-        is_booting = true;
-        boot_start_time = millis();
-
+        ui_init(); reset_menu_state(); lv_scr_load(ui_SplashScreen);
+        is_booting = true; boot_start_time = millis();
         emscripten_set_main_loop(emscripten_loop_wrapper, 0, 1);
         return 0;
     }
